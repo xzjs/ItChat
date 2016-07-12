@@ -45,8 +45,10 @@ def get_reply(msg, s, client, isGroupChat=False, cmdPrint=PRINT_ON_CMD):
             out.print_line('%s: %s' % (s.find_nickname(msg['FromUserName']), msg['Content']))
         content = msg['Content']
         # Plugins should be added in order as ('name', function)
-        pluginOrder = [('collect', collect), ('vote', vote), ('autoreply', autoreply), ('tuling', tuling.get_response)]
-        if isGroupChat: pluginOrder = [('autoreply', autoreply), ('tuling', tuling.get_response)]
+        # pluginOrder = [('collect', collect), ('vote', vote), ('autoreply', autoreply), ('tuling', tuling.get_response)]
+        pluginOrder = [('collect', collect)]
+        # if isGroupChat: pluginOrder = [('collect', collect), ('autoreply', autoreply), ('tuling', tuling.get_response)]
+        if isGroupChat: pluginOrder = [('collect', collect)]
         getReply = False
         for plugin in pluginOrder:
             if plugin[0] in (pluginList['msgdealers'] + pluginList['systemmodules']):
@@ -55,7 +57,7 @@ def get_reply(msg, s, client, isGroupChat=False, cmdPrint=PRINT_ON_CMD):
                     reply = r
                     getReply = True
                     break
-        if not getReply: reply = 'I received: %s' % content
+        # if not getReply: reply = 'I received: %s' % content
     elif msg['MsgType'] == 'Map':
         return 'You are there!'
         if not isGroupChat and cmdPrint:
@@ -94,8 +96,9 @@ def get_reply(msg, s, client, isGroupChat=False, cmdPrint=PRINT_ON_CMD):
 def deal_with_msg(msg, s, client):
     if msg.has_key('FromUserName') and msg['FromUserName'][:2] == '@@':
         try:
-            r = grouptalking(msg, s, client, get_reply)
-            send_msg(client, msg['FromUserName'], r)
+            r = grouptalking(msg, s, client, get_reply, True)
+            if r != '':
+                send_msg(client, msg['FromUserName'], r)
         except:
             log.log('Send group chat failed', False)
     else:
