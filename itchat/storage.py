@@ -16,6 +16,8 @@ class Storage:
             s3c.execute('create table if not exists message (time integer, message text, nickname text, fromto text)')
             s3c.execute(
                 'create table if not exists memberList (PYQuanPin text, NickName text, UserName text, Other text)')
+            s3c.execute(
+                'create table if not exists report (time integer, message text, UserName text)')
 
     def find_msg_list(self, userName, count):
         with Sqlite3Client(self.sqlDir) as s3c:
