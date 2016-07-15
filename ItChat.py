@@ -1,6 +1,8 @@
 # coding=utf8
 import time, sys
 
+from plugin.msgdealers.collect import report
+
 if sys.version[:3] != '2.7': print('This project should be run with python2.7');sys.exit()
 import itchat.storage, itchat.out, itchat.argparser, itchat.robot
 from itchat.client import WeChatClient
@@ -16,6 +18,7 @@ def demo_robot(s, msgList, client):  # ONLY FOR DEMO
         if msgList:
             msg = msgList.pop()
             itchat.robot.deal_with_msg(msg, s, client)
+        # rep.do()
         time.sleep(.1)
 
 

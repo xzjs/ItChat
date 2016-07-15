@@ -1,19 +1,11 @@
 # -*- coding:utf-8 -*-
+import re
+
 import time
 
+import thread
+
 from plugin.Sqlite3Client import Sqlite3Client
-
-
-def collect(msg, storageClass=None, userName=None):
-    str = '201'
-    if str in msg:
-        storageClass.store_report(userName, msg)
-    str = u'report'
-    if str in msg:
-        a = analyse()
-        text = a.get_sentence()
-        return text
-    return False
 
 
 class analyse:
@@ -25,7 +17,6 @@ class analyse:
         self.strs = [u'无人车项目推进:', u'停车项目推进:', u'(前端)', u'(后台)', u'手机信令项目推进:']
 
     def get_dict(self, names=None):
-        """ 将数据库中的语句生成字典 """
         dict = {}
         for name in names:
             with Sqlite3Client('storage/account/血之君殇.db') as s3c:
@@ -45,7 +36,6 @@ class analyse:
         return dict
 
     def get_sentence(self):
-        """ 获得最后的拼装语句 """
         for i in range(0, len(self.names)):
             for value in self.get_dict(self.names[i]).values():
                 for sentence in value:
@@ -58,18 +48,30 @@ class analyse:
         return self.str
 
 
+class mytime:
+    def __init__(self, h=22, m=0, s=0):
+        self.h = h
+        self.m = m
+        self.s = s
+
+    def func(self):
+        while True:
+            print 'func run'
+            time.sleep(1)
+
+    def main_func(self):
+        thread.start_new_thread(self.func, ())
+        while True:
+            print 'main run'
+            time.sleep(2)
+
+
 class report:
-    def __init__(self, s, nickname, client, time_str='220000'):
+    def __init__(self, s, nickname, client):
         self.s = s
         self.nickname = nickname
         self.client = client
-        self.time_str = time_str
-        self.username = self.s.find_user(self.nickname)
 
     def do(self):
-        time_str = time.strftime('%H%M%S')
-        print time_str
-        if time_str == self.time_str:
-            a = analyse()
-            msg = a.get_sentence()
-            self.client.send_msg(self.username, msg)
+        username = self.s.find_user(self.nickname)
+        self.client.send_msg(username)
