@@ -8,10 +8,14 @@ def collect(msg, storageClass=None, userName=None):
     str = '201'
     if str in msg:
         storageClass.store_report(userName, msg)
-    str = u'report'
+    str == u'report'
     if str in msg:
         a = analyse()
         text = a.get_sentence()
+        return text
+    if int(msg) > 1 and int(msg) < 9999999:
+        a = analyse()
+        text = a.liu(msg)
         return text
     return False
 
@@ -30,7 +34,7 @@ class analyse:
         for name in names:
             with Sqlite3Client('storage/account/血之君殇.db') as s3c:
                 # todo:这里应该搜索时间为今天的汇报
-                messages = s3c.query('select * from report WHERE UserName =?', (name,))
+                messages = s3c.query('select * from report WHERE UserName =? order by time desc', (name,))
                 if len(messages):
                     messagelist = (messages[0][1]).split('<br/>')[1:]
                     dict[name] = []
@@ -56,6 +60,19 @@ class analyse:
         l[-1] = '.'
         self.str = ''.join(l)
         return self.str
+
+    def liu(self, msg):
+        id_list = list(msg)
+        user_list = []
+        for id in id_list:
+            with Sqlite3Client('storage/account/血之君殇.db') as s3c:
+                user = s3c.query('select * from member WHERE id =?', (id,))[0][1]
+                user_list.append(user)
+        dict = self.get_dict(user_list)
+        str = ''
+        for key in dict.keys():
+            str += key + ':' + ','.join(dict[key]) + '\n'
+        return str;
 
 
 class report:
