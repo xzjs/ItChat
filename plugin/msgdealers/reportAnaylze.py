@@ -77,7 +77,7 @@ class reportAnaylze:
                 'create table if not exists my_reports(id integer,name text(128))')
 
     def collect(self, msg):
-        if '201' in msg['Content']:
+        if u'\u5de5\u4f5c\u6c47\u62a5' in msg['Content']:
             with Sqlite3Client(self.sqlDir) as s3c:
                 s3c.insert_data('reports',
                                 [msg['Content'], msg['ActualNickName'], int(time.time())])

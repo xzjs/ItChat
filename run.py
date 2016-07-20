@@ -16,10 +16,12 @@ def complex_reply():
     @itchat.msg_register(['Text', 'Map', 'Card', 'Note', 'Sharing'])
     def text_reply(msg):
         # itchat.send('%s: %s' % (msg['Type'], msg['Text']), msg['FromUserName'])
+        str = ''
         if msg['Content'] == 'report':
-            rA.get_sentence()
+            str = rA.get_sentence()
         if msg['Content'] == 'liu':
-            rA.liu()
+            str = rA.liu()
+        itchat.send(str, msg['FromUserName'])
 
     @itchat.msg_register(['Picture', 'Recording', 'Attachment', 'Video'])
     def download_files(msg):
@@ -47,5 +49,4 @@ if __name__ == '__main__':
     itchat.auto_login()
     # simple_reply()
     rA = reportAnaylze()
-    rA.auto_report(itchat)
     complex_reply()
