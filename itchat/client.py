@@ -1,9 +1,8 @@
-# -*- coding:utf-8 -*-
-import os, sys
+import os, sys, pickle
 import requests, time, re
-import thread, subprocess
+import threading, subprocess
 import json, xml.dom.minidom, mimetypes
-import config, storage, out, tools
+from . import config, storage, out, tools
 
 BASE_URL = config.BASE_URL
 
@@ -16,6 +15,33 @@ class client(object):
         self.loginInfo = {}
         self.s = requests.Session()
         self.uuid = None
+    def dump_login_status(self, fileDir):
+        try:
+            with open(fileDir, 'wb') as f: f.write('DELETE THIS')
+            os.remove(fileDir)
+        except:
+            raise Exception('Incorrect fileDir')
+        status = {
+            'loginInfo' : self.loginInfo,
+            'cookies'   : self.s.cookies.get_dict(), 
+            'storage'   : self.storageClass.dumps()}
+        with open(fileDir, 'wb') as f:
+            pickle.dump(status, f)
+    def load_login_status(self, fileDir):
+        try:
+            with open(fileDir, 'rb') as f:
+                j = pickle.load(f)
+        except Exception as e:
+            return False
+        self.loginInfo = j['loginInfo']
+        self.s.cookies = requests.utils.cookiejar_from_dict(j['cookies'])
+        self.storageClass.loads(j['storage'])
+        if self.__sync_check():
+            out.print_line('Login successfully as %s\n'%self.storageClass.nickName, True)
+            self.start_receiving()
+            return True
+        else:
+            return False
     def auto_login(self):
         def open_QR():
             for get_count in range(10):
@@ -23,7 +49,7 @@ class client(object):
                 while not self.get_QRuuid(): time.sleep(1)
                 out.print_line('Getting QR Code', True)
                 if self.get_QR(): break
-                elif get_count >= 9:
+                elif 9 <= get_count:
                     out.print_line('Failed to get QR Code, please restart the program')
                     sys.exit()
             out.print_line('Please scan the QR Code', True)
@@ -46,11 +72,9 @@ class client(object):
     def get_QRuuid(self):
         url = '%s/jslogin'%BASE_URL
         payloads = {
-            'appid': 'wx782c26e4c19acffb',
-            'fun': 'new',
-        }
+            'appid' : 'wx782c26e4c19acffb',
+            'fun'   : 'new', }
         r = self.s.get(url, params = payloads)
-
         regx = r'window.QRLogin.code = (\d+); window.QRLogin.uuid = "(\S+?)";'
         data = re.search(regx, r.text)
         if data and data.group(1) == '200': 
@@ -88,13 +112,13 @@ class client(object):
             self.loginInfo['BaseRequest'] = {}
             for node in xml.dom.minidom.parseString(r.text).documentElement.childNodes:
                 if node.nodeName == 'skey':
-                    self.loginInfo['skey'] = self.loginInfo['BaseRequest']['Skey'] = node.childNodes[0].data.encode('utf8')
+                    self.loginInfo['skey'] = self.loginInfo['BaseRequest']['Skey'] = node.childNodes[0].data
                 elif node.nodeName == 'wxsid':
-                    self.loginInfo['wxsid'] = self.loginInfo['BaseRequest']['Sid'] = node.childNodes[0].data.encode('utf8')
+                    self.loginInfo['wxsid'] = self.loginInfo['BaseRequest']['Sid'] = node.childNodes[0].data
                 elif node.nodeName == 'wxuin':
-                    self.loginInfo['wxuin'] = self.loginInfo['BaseRequest']['Uin'] = node.childNodes[0].data.encode('utf8')
+                    self.loginInfo['wxuin'] = self.loginInfo['BaseRequest']['Uin'] = node.childNodes[0].data
                 elif node.nodeName == 'pass_ticket':
-                    self.loginInfo['pass_ticket'] = self.loginInfo['BaseRequest']['DeviceID'] = node.childNodes[0].data.encode('utf8')
+                    self.loginInfo['pass_ticket'] = self.loginInfo['BaseRequest']['DeviceID'] = node.childNodes[0].data
             return '200'
         elif data and data.group(1) == '201':
             return '201'
@@ -105,16 +129,14 @@ class client(object):
     def web_init(self):
         url = '%s/webwxinit?r=%s' % (self.loginInfo['url'], int(time.time()))
         payloads = {
-            'BaseRequest': self.loginInfo['BaseRequest']
-        }
+            'BaseRequest': self.loginInfo['BaseRequest'], }
         headers = { 'ContentType': 'application/json; charset=UTF-8' }
         r = self.s.post(url, data = json.dumps(payloads), headers = headers)
         dic = json.loads(r.content.decode('utf-8', 'replace'))
+        tools.emoji_formatter(dic['User'], 'NickName')
         self.loginInfo['User'] = dic['User']
         self.loginInfo['SyncKey'] = dic['SyncKey']
         self.loginInfo['synckey'] = '|'.join(['%s_%s' % (item['Key'], item['Val']) for item in dic['SyncKey']['List']])
-        # deal with emoji
-        dic['User'] = tools.emoji_dealer(dic['User'])
         self.storageClass.userName = dic['User']['UserName']
         self.storageClass.nickName = dic['User']['NickName']
         return dic['User']
@@ -127,7 +149,9 @@ class client(object):
             'List': [{
                 'UserName': userName,
                 'ChatRoomId': '', }], }
-        j = self.s.post(url, data = json.dumps(payloads), headers = headers).json()['ContactList'][0]
+        j = json.loads(self.s.post(url, data = json.dumps(payloads), headers = headers
+                ).content.decode('utf8', 'replace'))['ContactList'][0]
+        for member in j['MemberList']: tools.emoji_formatter(member, 'NickName')
         j['isAdmin'] = j['OwnerUin'] == int(self.loginInfo['wxuin'])
         return j
     def get_contract(self, update = False):
@@ -139,18 +163,20 @@ class client(object):
         tempList = json.loads(r.content.decode('utf-8', 'replace'))['MemberList']
         del self.chatroomList[:]
         del self.memberList[:]
-        self.memberList.append(tools.emoji_dealer(self.loginInfo['User']))
+        self.memberList.append(self.loginInfo['User'])
         for m in tempList:
+            tools.emoji_formatter(m, 'NickName')
             if m['Sex'] != 0:
-                self.memberList.append(tools.emoji_dealer(m))
+                self.memberList.append(m)
             elif not (any([str(n) in m['UserName'] for n in range(10)]) and 
                     any([chr(n) in m['UserName'] for n in (
-                    range(ord('a'), ord('z') + 1) + range(ord('A'), ord('Z') + 1))])):
+                    list(range(ord('a'), ord('z') + 1)) +
+                    list(range(ord('A'), ord('Z') + 1)))])):
                 continue # userName have number and str
             elif '@@' in m['UserName']:
-                self.chatroomList.append(tools.emoji_dealer(m))
+                self.chatroomList.append(m)
             elif m['VerifyFlag'] & 8 == 0 and '@' in m['UserName']:
-                self.memberList.append(tools.emoji_dealer(m))
+                self.memberList.append(m)
         return self.memberList
     def get_chatrooms(self, update = False):
         if update: self.get_contract(update = True)
@@ -182,11 +208,13 @@ class client(object):
                     time.sleep(pauseTime)
                     i = self.__sync_check()
                     count = 0
-                except Exception, e:
+                except Exception as e:
                     count += 1
                     time.sleep(count*3)
             out.print_line('LOG OUT', False)
-        thread.start_new_thread(maintain_loop, ())
+        maintainThread = threading.Thread(target = maintain_loop)
+        maintainThread.setDaemon(True)
+        maintainThread.start()
     def __sync_check(self):
         url = '%s/synccheck'%self.loginInfo['url']
         payloads = {
@@ -222,6 +250,7 @@ class client(object):
         srl = [40, 43, 50, 52, 53, 9999]
         # 40 msg, 43 videochat, 50 VOIPMSG, 52 voipnotifymsg, 53 webwxvoipnotifymsg, 9999 sysnotice
         for m in l:
+            tools.msg_formatter(m, 'Content')
             if '@@' in m['FromUserName']: m = self.__produce_group_chat(m)
             if m['MsgType'] == 1: # words
                 if m['Url']:
@@ -315,7 +344,7 @@ class client(object):
                     payloads = {
                         'msgid': m['MsgId'],
                         'skey': self.loginInfo['skey'],}
-                    headers = { 'Range:': 'bytes=0-'}
+                    headers = {'Range': 'bytes=0-'}
                     r = self.s.get(url, params = payloads, headers = headers, stream = True)
                     with open(videoDir, 'wb') as f: 
                         for chunk in r.iter_content(chunk_size = 1024):
@@ -388,18 +417,17 @@ class client(object):
     def send_msg(self, msg = 'Test Message', toUserName = None):
         url = '%s/webwxsendmsg'%self.loginInfo['url']
         payloads = {
-                'BaseRequest': self.loginInfo['BaseRequest'],
-                'Msg': {
-                    'Type': 1,
-                    'Content': msg.encode('utf8') if isinstance(msg, unicode) else msg,
-                    'FromUserName': self.storageClass.userName.encode('utf8'),
-                    'ToUserName': (toUserName if toUserName else self.storageClass.userName).encode('utf8'),
-                    'LocalID': int(time.time()),
-                    'ClientMsgId': int(time.time()),
-                    },
-                }
+            'BaseRequest': self.loginInfo['BaseRequest'],
+            'Msg': {
+                'Type': 1,
+                'Content': msg,
+                'FromUserName': self.storageClass.userName,
+                'ToUserName': (toUserName if toUserName else self.storageClass.userName),
+                'LocalID': int(time.time()),
+                'ClientMsgId': int(time.time()),
+                }, }
         headers = { 'ContentType': 'application/json; charset=UTF-8' }
-        r = self.s.post(url, data = json.dumps(payloads, ensure_ascii = False), headers = headers)
+        r = self.s.post(url, data = json.dumps(payloads, ensure_ascii = False).encode('utf8'), headers = headers)
     def __upload_file(self, fileDir, isPicture = False):
         if not tools.check_file(fileDir): return
         url = 'https://file%s.wx.qq.com/cgi-bin/mmwebwx-bin/webwxuploadmedia?f=json'%('2' if '2' in self.loginInfo['url'] else '')
@@ -408,24 +436,22 @@ class client(object):
         cookiesList = {name:data for name,data in self.s.cookies.items()}
         fileType = mimetypes.guess_type(fileDir)[0] or 'application/octet-stream'
         files = {
-                'id': (None, 'WU_FILE_0'),
-                'name': (None, os.path.basename(fileDir)),
-                'type': (None, fileType),
-                'lastModifiedDate': (None, time.strftime('%a %b %d %Y %H:%M:%S GMT+0800 (CST)')),
-                'size': (None, fileSize),
-                'mediatype': (None, 'pic' if isPicture else 'doc'),
-                'uploadmediarequest': (None, json.dumps({
-                    'BaseRequest': self.loginInfo['BaseRequest'],
-                    'ClientMediaId': int(time.time()),
-                    'TotalLen': fileSize,
-                    'StartPos': 0,
-                    'DataLen': fileSize,
-                    'MediaType': 4,
-                    }, separators = (',', ':'))),
-                'webwx_data_ticket': (None, cookiesList['webwx_data_ticket']),
-                'pass_ticket': (None, 'undefined'),
-                'filename' : (os.path.basename(fileDir), open(fileDir, 'rb'), fileType),
-                }
+            'id': (None, 'WU_FILE_0'),
+            'name': (None, os.path.basename(fileDir)),
+            'type': (None, fileType),
+            'lastModifiedDate': (None, time.strftime('%a %b %d %Y %H:%M:%S GMT+0800 (CST)')),
+            'size': (None, fileSize),
+            'mediatype': (None, 'pic' if isPicture else 'doc'),
+            'uploadmediarequest': (None, json.dumps({
+                'BaseRequest': self.loginInfo['BaseRequest'],
+                'ClientMediaId': int(time.time()),
+                'TotalLen': fileSize,
+                'StartPos': 0,
+                'DataLen': fileSize,
+                'MediaType': 4, }, separators = (',', ':'))),
+            'webwx_data_ticket': (None, cookiesList['webwx_data_ticket']),
+            'pass_ticket': (None, 'undefined'),
+            'filename' : (os.path.basename(fileDir), open(fileDir, 'rb'), fileType), }
         headers = { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 Safari/537.36', }
         r = self.s.post(url, files = files, headers = headers)
         return json.loads(r.text)['MediaId']
@@ -435,22 +461,21 @@ class client(object):
         if mediaId is None: return False
         url = '%s/webwxsendappmsg?fun=async&f=json'%self.loginInfo['url']
         payloads = {
-                'BaseRequest': self.loginInfo['BaseRequest'],
-                'Msg': {
-                    'Type': 6,
-                    'Content': ("<appmsg appid='wxeb7ec651dd0aefa9' sdkver=''><title>%s</title>"%os.path.basename(fileDir) +
-                        "<des></des><action></action><type>6</type><content></content><url></url><lowurl></lowurl>" +
-                        "<appattach><totallen>%s</totallen><attachid>%s</attachid>"%(str(os.path.getsize(fileDir)), mediaId) +
-                        "<fileext>%s</fileext></appattach><extinfo></extinfo></appmsg>"%os.path.splitext(fileDir)[1].replace('.','')
-                        ).encode('utf8'),
-                    'FromUserName': self.storageClass.userName.encode('utf8'),
-                    'ToUserName': toUserName.encode('utf8'),
-                    'LocalID': str(time.time() * 1e7),
-                    'ClientMsgId': str(time.time() * 1e7), }, }
+            'BaseRequest': self.loginInfo['BaseRequest'],
+            'Msg': {
+                'Type': 6,
+                'Content': ("<appmsg appid='wxeb7ec651dd0aefa9' sdkver=''><title>%s</title>"%os.path.basename(fileDir) +
+                    "<des></des><action></action><type>6</type><content></content><url></url><lowurl></lowurl>" +
+                    "<appattach><totallen>%s</totallen><attachid>%s</attachid>"%(str(os.path.getsize(fileDir)), mediaId) +
+                    "<fileext>%s</fileext></appattach><extinfo></extinfo></appmsg>"%os.path.splitext(fileDir)[1].replace('.','')), 
+                'FromUserName': self.storageClass.userName,
+                'ToUserName': toUserName,
+                'LocalID': str(time.time() * 1e7),
+                'ClientMsgId': str(time.time() * 1e7), }, }
         headers = {
             'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 Safari/537.36',
             'Content-Type': 'application/json;charset=UTF-8', }
-        r = self.s.post(url, data = json.dumps(payloads, ensure_ascii = False), headers = headers)
+        r = self.s.post(url, data = json.dumps(payloads, ensure_ascii = False).encode('utf8'), headers = headers)
         return True
     def send_image(self, fileDir, toUserName = None):
         if toUserName is None: toUserName = self.storageClass.userName
@@ -458,14 +483,14 @@ class client(object):
         if mediaId is None: return False
         url = '%s/webwxsendmsgimg?fun=async&f=json'%self.loginInfo['url']
         payloads = {
-                'BaseRequest': self.loginInfo['BaseRequest'],
-                'Msg': {
-                    'Type': 3,
-                    'MediaId': mediaId,
-                    'FromUserName': self.storageClass.userName.encode('utf8'),
-                    'ToUserName': toUserName.encode('utf8'),
-                    'LocalID': str(time.time() * 1e7),
-                    'ClientMsgId': str(time.time() * 1e7), }, }
+            'BaseRequest': self.loginInfo['BaseRequest'],
+            'Msg': {
+                'Type': 3,
+                'MediaId': mediaId,
+                'FromUserName': self.storageClass.userName,
+                'ToUserName': toUserName,
+                'LocalID': str(time.time() * 1e7),
+                'ClientMsgId': str(time.time() * 1e7), }, }
         if fileDir[-4:] == '.gif':
             url = '%s/webwxsendemoticon?fun=sys'%self.loginInfo['url']
             payloads['Msg']['Type'] = 47
@@ -473,22 +498,21 @@ class client(object):
         headers = {
             'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 Safari/537.36',
             'Content-Type': 'application/json;charset=UTF-8', }
-        r = self.s.post(url, data = json.dumps(payloads, ensure_ascii = False), headers = headers)
+        r = self.s.post(url, data = json.dumps(payloads, ensure_ascii = False).encode('utf8'), headers = headers)
         return True
-    def add_friend(self, Status, UserName, Ticket):
+    def add_friend(self, status, userName, ticket):
         url = '%s/webwxverifyuser?r=%s&pass_ticket=%s'%(self.loginInfo['url'], int(time.time()), self.loginInfo['pass_ticket'])
         payloads = {
             'BaseRequest': self.loginInfo['BaseRequest'],
-            'Opcode': Status,
+            'Opcode': status,
             'VerifyUserListSize': 1,
             'VerifyUserList': [{
-                'Value': UserName,
-                'VerifyUserTicket': Ticket,
-                }],
+                'Value': userName,
+                'VerifyUserTicket': ticket, }],
             'VerifyContent': '',
             'SceneListCount': 1,
             'SceneList': 33,
-            'skey': self.loginInfo['skey'],}
+            'skey': self.loginInfo['skey'], }
         headers = { 'ContentType': 'application/json; charset=UTF-8' }
         r = self.s.post(url, data = json.dumps(payloads), headers = headers)
     def create_chatroom(self, memberList, topic = ''):
@@ -510,7 +534,7 @@ class client(object):
         params = {
             'BaseRequest': self.loginInfo['BaseRequest'],
             'ChatRoomName': chatRoomName,
-            'DelMemberList': ','.join([member['UserName'] for member in memberList]),}
+            'DelMemberList': ','.join([member['UserName'] for member in memberList]), }
         headers = {'content-type': 'application/json; charset=UTF-8'}
         return self.s.post(url, data=json.dumps(params),headers=headers)
     def add_member_into_chatroom(self, chatRoomName, memberList):
@@ -519,7 +543,7 @@ class client(object):
         params = {
             'BaseRequest': self.loginInfo['BaseRequest'],
             'ChatRoomName': chatRoomName,
-            'AddMemberList': ','.join([member['UserName'] for member in memberList]),}
+            'AddMemberList': ','.join([member['UserName'] for member in memberList]), }
         headers = {'content-type': 'application/json; charset=UTF-8'}
         r = self.s.post(url, data=json.dumps(params),headers=headers)
 

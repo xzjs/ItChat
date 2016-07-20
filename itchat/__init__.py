@@ -1,13 +1,17 @@
-import time, thread
-from client import client
+import time
+from .client import client
 
-import traceback
-
-__version__ = '1.0.11'
+__version__ = '1.0.13'
 
 __client = client()
-def auto_login(): return __client.auto_login()
-# The following method are all included in auto_login >>>
+def auto_login(hotReload = False, statusStorageDir = 'itchat.pkl'):
+    if hotReload:
+        if __client.load_login_status(statusStorageDir): return
+        __client.auto_login()
+        __client.dump_login_status(statusStorageDir)
+    else:
+        __client.auto_login()
+# The following method are all included in __client.auto_login >>>
 def get_QRuuid(): return __client.get_QRuuid()
 def get_QR(uuid = None): return __client.get_QR(uuid)
 def check_login(uuid = None): return __client.check_login(uuid)
@@ -17,6 +21,10 @@ def get_contract(update = False): return __client.get_contract(update)
 def get_chatrooms(update = False): return __client.get_chatrooms(update)
 def show_mobile_login(): return __client.show_mobile_login()
 def start_receiving(): return __client.start_receiving()
+# <<<
+# The following method are for reload without re-scan the QRCode
+def dump_login_status(fileDir = 'itchat.pkl'): return __client.dump_login_status(fileDir)
+def load_login_status(fileDir = 'itchat.pkl'): return __client.load_login_status(fileDir)
 # <<<
 # if toUserName is set to None, msg will be sent to yourself
 def send_msg(msg = 'Test Message', toUserName = None): return __client.send_msg(msg, toUserName)
@@ -68,7 +76,9 @@ def msg_register(_type = None, *args, **kwargs):
 # in-build run
 def run():
     print('Start auto replying')
-    while 1:
-        configured_reply()
-        time.sleep(.3)
-
+    try:
+        while 1:
+            configured_reply()
+            time.sleep(.3)
+    except KeyboardInterrupt:
+        print('Bye~')
