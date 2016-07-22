@@ -5,7 +5,7 @@ itchat.egg-info/*
 *.swp
 test.py
 itchat.pkl
-/nohup.out
 log/
 nohup.out
 storage/
+QR.jpg
