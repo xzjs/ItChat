@@ -1,4 +1,5 @@
 import re, os, sys
+import subprocess
 
 try:
     from HTMLParser import HTMLParser

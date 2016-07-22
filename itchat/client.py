@@ -45,7 +45,7 @@ class client(object):
             return True
         else:
             return False
-    def auto_login(self, enableCmdQR = True):
+    def auto_login(self, enableCmdQR = False):
         def open_QR():
             for get_count in range(10):
                 out.print_line('Getting uuid', True)
@@ -83,7 +83,7 @@ class client(object):
         if data and data.group(1) == '200': 
             self.uuid = data.group(2)
             return self.uuid
-    def get_QR(self, uuid = None, enableCmdQR = True):
+    def get_QR(self, uuid = None, enableCmdQR = False):
         try:
             if uuid == None: uuid = self.uuid
             url = '%s/qrcode/%s'%(BASE_URL, uuid)
@@ -96,6 +96,8 @@ class client(object):
                 tools.print_qr(QR_DIR)
             return True
         except:
+            import traceback
+            traceback.print_exc()
             return False
     def check_login(self, uuid = None):
         if uuid is None: uuid = self.uuid
