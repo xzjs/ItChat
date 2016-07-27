@@ -40,10 +40,10 @@ class reportAnaylze:
         dict = {}
         for name in names:
             with Sqlite3Client(self.sqlDir) as s3c:
-                messages = s3c.query('select * from report WHERE UserName =? order by time desc', (name,))
+                messages = s3c.query('select * from reports WHERE nickname =? order by time desc', (name,))
                 if len(messages):
-                    messagelist = (messages[0][1])[4:]
-                    dict[name] = messagelist
+                    messagelist = (messages[0][0])[5:]
+                    dict[name] = messagelist.strip()
         return dict
 
     def get_sentence(self):
