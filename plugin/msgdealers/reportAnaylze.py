@@ -8,7 +8,7 @@ from plugin.Sqlite3Client import Sqlite3Client
 
 class reportAnaylze:
     def __init__(self):
-        self.str = u'网络所(' + time.strftime('%Y%m%d') + u')网络所工作汇报:平行网络和车联网相关研究推进;'
+        self.str = ''
         self.names = [[u'李静', u'要婷婷', u'宋瑞琦', u'郭奇', u'温纪庆', u'胡成云', u'王迎春'], [u'刘全杰'], [u'李茂双', u'王金慧', u'孙玉秀'],
                       [u'晏西国'],
                       [u'王晶']]
@@ -48,6 +48,7 @@ class reportAnaylze:
 
     def get_sentence(self):
         """ 获得最后的拼装语句 """
+        self.str = u'工作汇报:平行网络和车联网相关研究推进;'
         for i in range(0, len(self.names)):
             for value in self.get_dict(self.names[i]).values():
                 self.strs[i] += value + ','
